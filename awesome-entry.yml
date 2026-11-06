@@ -1,0 +1,8 @@
+# 待提交到 awesome-dsh-plugin 的条目（目标路径：data/plugins/lidaqi001__dsh-codex-delegate.yml）
+# 合并前请先确认：仓库创建满 1 天、已加 `dsh-plugin` topic、package.json 声明 dsh.bundle（已满足）。
+url: https://github.com/lidaqi001/dsh-codex-delegate
+name: lidaqi001/dsh-codex-delegate
+category: workflow
+description:
+  en: Adds a DeepSeek Harness agent preset that delegates every task to a Codex subagent; the session agent only splits, dispatches and reports results.
+  zh: 新增一个 DeepSeek Harness Agent 预设：把每个任务都交给 Codex 子代理执行，主会话只负责拆分、委派与汇总。
