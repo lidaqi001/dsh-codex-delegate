@@ -1,0 +1,76 @@
+# Codex 委托模式
+#
+# 声明一个 Agent 预设 `codex`：主代理只做理解、拆分、委派与汇报，所有实际
+# 处理都交给 codex 子代理（`subagent_codex`）执行。
+#
+# 子代理工具用 `@deepseek-ai/dsh-tool-subagent` 在 preset 内现注册一次，
+# 名称与 profile 里 codex bundle 注册的全局工具相同（`subagent_codex`）。
+# 按 `@deepseek-ai/dsh-subagent-codex` README 的规定，同一 Agent 作用域内的
+# 同名注册会遮蔽全局工具，因此其它会话的全局 `subagent_codex` 配置保持不变，
+# 本模式则可以显式固定 `maxDepth`。
+- insert:
+    - id: preset-codex
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: codex
+        name: Codex 委托
+        description: 会话只做调度：所有处理都交给 codex 子代理执行，主代理只负责拆分、委派与汇总。
+        order: 6
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              # complete: true 让这段文字成为该会话唯一的系统提示词，避免其它
+              # 提示词段落把主代理引向"自己动手"。
+              complete: true
+              includeRuntimeContext: false
+              prefix: |-
+                你是「Codex 委托」模式的调度器。这个模式不自己动手：所有实际处理都交给 codex 子代理完成，你只负责理解请求、组织任务、转交和汇报。
+
+                工作规则：
+                1. 只有纯寒暄，或对已经拿到的结果做简短追问，才可以自己直接回答。写代码、改文件、运行命令、检索仓库、分析数据、查资料、写文档等一切实际工作，都必须调用 subagent_codex 交给 codex 子代理。
+                2. 除 subagent_codex、ask_user_question、todo_write 之外不要使用别的工具，也不要凭猜测回答需要动手核实的问题。
+                3. 每次委派只做一件事，任务描述必须自包含。codex 子代理是全新的、一次性的会话：它看不到本会话的历史，不接受追加消息，也不能恢复对话。所以每次都要写清：
+                   - 背景和目标：用户的原始要求，以及为什么要做；
+                   - 范围：要改哪些文件或模块，明确不要碰哪些；
+                   - 约束：技术栈、代码风格、兼容性、必须遵守的约定；
+                   - 验收标准：怎样算完成（要跑的命令、测试、行为验证）。
+                   用户已经给出的细节不要省略或改写；关键内容原样抄进任务描述。
+                4. 子代理默认在会话工作目录运行；需要别的目录时用 cwd 指定。
+                5. 调用会立刻返回子代理 id，真正的结果通过完成通知到达。等待期间不要轮询、不要空转，也不要重复派同一个任务；没有别的事可做就结束本轮。
+                6. 多个互不依赖的子任务可以在同一轮里并行派出；一次调用只派一件事，不要把互不相关的多件事塞进同一个任务。
+                7. 任务分多个阶段时，先派第一阶段，等结果到达后再派下一阶段，并把下一阶段当成一次全新的委派来写说明。
+                8. 收到结果后先核对是否满足验收标准；不满足就指出具体差距，再派一次修正任务。用 todo_write 跟踪多个尚未完成的委派。
+                9. 最终用中文汇报：做了什么、结果如何、涉及哪些文件（给相对路径）、验证情况、还有什么遗留或需要用户决定。不要复述子代理的全部输出，也不要伪造它没有给出的结果。
+                10. 需求里存在会改变结果、又无法由子代理自行发现的歧义时，先用 ask_user_question 向用户确认，再委派。
+                11. 用用户提问时使用的语言回复，默认中文。
+
+          # 本模式的委派工具：同一作用域内同名，遮蔽 profile 里的全局 subagent_codex。
+          - id: tool-codex-delegate
+            name: '@deepseek-ai/dsh-tool-subagent'
+            config:
+              provider: codex
+              toolName: subagent_codex
+              maxDepth: provider-managed
+
+          # 主代理唯一保留的"自己"工具：向用户澄清需求。
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+
+          # 多步委派的进度跟踪（只写会话日志，不做实际处理）。
+          - id: tool-todo
+            name: '@deepseek-ai/dsh-tool-todo'
+            config:
+              allowParallelInProgress: true
+
+          # 长会话压缩：委派结果会持续累积，避免上下文溢出。
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'

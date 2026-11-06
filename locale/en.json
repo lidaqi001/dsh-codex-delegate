@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Codex delegation mode",
+    "description": "Adds an agent preset that delegates every task to Codex subagents; the session only splits, dispatches, and reports."
+  }
+}

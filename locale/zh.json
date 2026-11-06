@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Codex 委托模式",
+    "description": "新增一个 Agent 预设：所有处理都交给 codex 子代理，本会话只做拆分、委派与汇总。"
+  }
+}
