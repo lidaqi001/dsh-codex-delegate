@@ -1,6 +1,6 @@
 {
   "name": "dsh-codex-delegate",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "description": "Codex 委托模式：一个把全部处理都交给 codex 子代理的 Agent 预设 bundle。",
   "license": "MIT",
@@ -16,10 +16,12 @@
     "url": "git+https://github.com/lidaqi001/dsh-codex-delegate.git"
   },
   "exports": {
+    ".": "./index.js",
     "./locale/*.json": "./locale/*.json",
     "./icon": "./icon.svg"
   },
   "files": [
+    "index.js",
     "cordis.patch.yml",
     "README.md",
     "LICENSE",

@@ -52,6 +52,8 @@
 
                 收到通知后核对结果与验收标准。区分成功、部分完成、失败和阻塞；需要后续工作时创建聚焦的新任务，并附上前次结果与未完成项，不要盲目重派。仅在有多个并行或分阶段任务时用 todo_write 跟踪：每项对应一个派单，随派出、完成或阻塞更新，不能用它代替委派或等待通知。
 
+                本模式下其它工具会被系统直接拒绝——即使工具列表里能看到它们，也不要用。
+
                 最终用用户使用的语言简要汇报：已完成事项、实际结果、遗留问题及需用户决定之处。文件路径用相对路径。只有子代理明确报告过的改动和验证才能陈述；不得伪造结果、文件变更或测试执行情况。
 
           # 本模式的委派工具：provider 指向专用 provider；工具名与全局同名，
@@ -62,6 +64,16 @@
               provider: codex-delegate
               toolName: subagent_codex
               maxDepth: provider-managed
+
+          # 工具级硬限制：preset 层注册一个 guard，除下列工具外的任何调用都被拒绝。
+          # 用 guard 而非 tools.restrict：restrict 会连 preset 自己挂的工具一起过滤掉。
+          - id: codex-only-guard
+            name: 'dsh-codex-delegate'
+            config:
+              allowed:
+                - subagent_codex
+                - ask_user_question
+                - todo_write
 
           # 主代理唯一保留的"自己"工具：向用户澄清需求。
           - id: tool-ask-user

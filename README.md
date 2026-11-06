@@ -8,7 +8,7 @@
 
 - npm：`dsh-codex-delegate`
 - DSH Agent 预设 id：`codex`
-- 纯声明式 bundle：无插件代码、无需编译，7 KB
+- 纯 YAML 配置 + 一个很小的 Host 插件（`index.js`，约 1 KB），无需编译
 
 ## 模式怎么工作
 
@@ -18,19 +18,22 @@
 | `subagent_codex`（scoped，遮蔽全局同名工具） | 唯一的"干活"工具，`maxDepth: provider-managed`；指向 bundle 自带的专用 provider `codex-delegate`（`permissionMode: approve-for-me`），同名遮蔽全局工具，其它会话配置不受影响 |
 | `ask_user_question` | 需求有歧义时向用户确认 |
 | `todo_write` | 多步委派的进度跟踪（只写会话日志） |
+| `codex-only-guard` | **工具级硬限制**：preset 层注册执行期 guard，除上面三个工具外，任何工具调用都被拒绝 |
 | `compaction` | 长会话里委派结果会持续累积，自动压缩 |
 
-预设里只挂载了上面这几个工具，没有 bash / 文件 / 搜索工具；但 profile 中若还有全局工具（如 MCP、Agent Teams），它们对预设会话仍可能可见。因此是 persona 强约束、而非工具级隔离——要硬隔离需额外 gate 插件（见「可调项」）。
+预设里只挂载了委派/澄清/进度/压缩四类工具，没有 bash / 文件 / 搜索工具。profile 里 Host 级注册的全局工具（MCP、Agent Teams 等）**仍会出现在工具列表里**，但 `codex-only-guard` 会在执行时直接拒绝它们，返回"本模式下不可用，请改为委派"。
+
+为什么用 guard 而不是 `ctx.tools.restrict`（可见性遮罩）：`restrict` 会把 preset 层注册的工具也一起过滤，连 `ask_user_question`、`todo_write` 都会被隐藏；guard 只按工具名拒绝调用，不会误伤，也不会影响其它预设/其它会话。
 
 ## 安装
 
 ```sh
 # 在 DSH 会话里直接说：
-帮我安装 dsh-codex-delegate
+帮我安装 dsh-codex-delegate@1.0.2
 ```
 
-代理会调用 `plugin_manager` 的 `install_bundle`，target 写 `dsh-codex-delegate` 或
-`dsh-codex-delegate@1.0.0` 都行。
+代理会调用 `plugin_manager` 的 `install_bundle`，target 写 `dsh-codex-delegate`（装 latest）
+或带版本号都行。
 
 装完验证：
 
@@ -80,9 +83,9 @@ npm publish                # publishConfig 已指向 registry.npmjs.org、access
 
 ## 可调项
 
-- **更硬的约束**：加一个 gate 插件，用 `ctx.tools.restrict(...)` 把全局工具也屏蔽掉。当前版本**未包含**：
-  `restrict` 要求调用方处于 scoped context，而 preset 作用域下注册与遮蔽的交互（是否会把 preset 自己
-  挂的 `ask_user_question`/`todo_write` 一起挡掉）只有真实会话才能验证，未验证前不发布硬隔离。
+- **硬限制的允许列表**：`codex-only-guard` 的 `allowed` 可改（默认 `subagent_codex`、`ask_user_question`、`todo_write`）；
+  想去掉澄清/进度工具就同时删掉对应插件行。若想让主代理连"看到"都要更干净，只能在没有 preset 层
+  工具的前提下改用 `ctx.tools.restrict`，但会一并隐藏 preset 自己的工具，需要实测后再上。
 - **codex 权限与沙箱**：`permissionMode` 写在 provider 行（`subagent-codex-delegate`），不是工具行：
   - `approve-for-me`（当前默认）：`approvalPolicy: on-request` + 自动审批 + `sandbox: workspace-write`
     → **工作区可写**，无人值守也能跑；需要越界的操作走 codex 自动审批。
@@ -97,6 +100,13 @@ npm publish                # publishConfig 已指向 registry.npmjs.org、access
 `plugin_manager` `remove_bundle`，target `dsh-codex-delegate`；或设置 → 插件里停用/移除。
 
 ## 变更记录
+
+### 1.0.2
+
+- 新增 `codex-only-guard`（preset 层执行期 guard）：除 `subagent_codex`、`ask_user_question`、`todo_write`
+  外的工具调用一律被拒绝，把"只能把活交给 codex"从提示词约束升级为**运行时强制**。
+- persona 增加一句：其它工具即使可见也会被系统拒绝，不要尝试。
+- 包结构从"纯声明式"变为带一个 Host 插件（`index.js`），`exports` 增加 `.`。
 
 ### 1.0.1
 
