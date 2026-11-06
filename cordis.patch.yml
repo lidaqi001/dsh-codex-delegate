@@ -3,17 +3,28 @@
 # 声明一个 Agent 预设 `codex`：主代理只做理解、澄清、拆分、委派与汇报，所有
 # 实际处理都交给 codex 子代理（`subagent_codex`）执行。
 #
-# 子代理工具用 `@deepseek-ai/dsh-tool-subagent` 在 preset 内现注册一次，名称与
-# profile 里 codex bundle 注册的全局工具相同（`subagent_codex`）。按
-# `@deepseek-ai/dsh-subagent-codex` README 的规定，同一作用域内的同名注册会遮蔽
-# 全局工具，因此其它会话的全局 `subagent_codex` 配置保持不变，本模式则可以显式
-# 固定 `maxDepth`。
+# 本 bundle 在 Host 层注册一个专用 provider：providerName `codex-delegate`、
+# permissionMode `approve-for-me`。原因：provider 的 permissionMode 决定 codex
+# 拿到的沙箱——实测默认的 `never` 只会给只读沙箱（工作区内也写不了文件），
+# `approve-for-me` 才会给 `sandbox: workspace-write`，并在需要时走 codex 的自动
+# 审批（无人工介入），这是"把活交给 codex"能真正改文件的前提。
+#
+# 子代理工具用 `@deepseek-ai/dsh-tool-subagent` 在 preset 内注册，工具名沿用
+# `subagent_codex`（同作用域同名遮蔽 profile 里的全局工具，因此其它会话的全局
+# `subagent_codex` 不受影响），provider 指向上面的专用 provider。
 #
 # 约束强度说明：这里的隔离是"提示词级"的——本 preset 只挂载委派、澄清、进度和
 # 压缩四类插件，没有 bash / 文件 / 搜索工具；但 profile 里 Host 级注册的全局工具
 # （MCP、Agent Teams 等）仍可能对本模式的 Agent 可见。要工具级硬隔离需要额外的
 # gate 插件，当前版本未包含（见 README「可调项」）。
 - insert:
+    # Host 层：本模式专用的 codex provider（名称全局唯一，不动全局 `codex`）。
+    - id: subagent-codex-delegate
+      name: '@deepseek-ai/dsh-subagent-codex'
+      config:
+        providerName: codex-delegate
+        permissionMode: approve-for-me
+
     - id: preset-codex
       name: '@deepseek-ai/dsh-agent-preset'
       config:
@@ -43,11 +54,12 @@
 
                 最终用用户使用的语言简要汇报：已完成事项、实际结果、遗留问题及需用户决定之处。文件路径用相对路径。只有子代理明确报告过的改动和验证才能陈述；不得伪造结果、文件变更或测试执行情况。
 
-          # 本模式的委派工具：同一作用域内同名，遮蔽 profile 里的全局 subagent_codex。
+          # 本模式的委派工具：provider 指向专用 provider；工具名与全局同名，
+          # 在同一作用域内遮蔽全局 `subagent_codex`。
           - id: tool-codex-delegate
             name: '@deepseek-ai/dsh-tool-subagent'
             config:
-              provider: codex
+              provider: codex-delegate
               toolName: subagent_codex
               maxDepth: provider-managed
 

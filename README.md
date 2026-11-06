@@ -15,7 +15,7 @@
 | 组成 | 作用 |
 |---|---|
 | `persona`（`complete: true`） | 该会话唯一的系统提示词：只做调度，不直接动手；委派必须自包含（子代理看不到会话、一次性、不接受追问）；异步等待不轮询；多阶段先派第一步；结果先核对验收再汇报 |
-| `subagent_codex`（scoped，遮蔽全局同名工具） | 唯一的"干活"工具，`maxDepth: provider-managed`，同名遮蔽 profile 里的全局工具，其它会话配置不受影响 |
+| `subagent_codex`（scoped，遮蔽全局同名工具） | 唯一的"干活"工具，`maxDepth: provider-managed`；指向 bundle 自带的专用 provider `codex-delegate`（`permissionMode: approve-for-me`），同名遮蔽全局工具，其它会话配置不受影响 |
 | `ask_user_question` | 需求有歧义时向用户确认 |
 | `todo_write` | 多步委派的进度跟踪（只写会话日志） |
 | `compaction` | 长会话里委派结果会持续累积，自动压缩 |
@@ -41,8 +41,9 @@
 ## 前置条件
 
 1. DeepSeek Harness `^0.2.2-rc.1`（见 `peerDependencies`）。
-2. profile 里已安装 codex 子代理 bundle `@deepseek-ai/dsh-subagent-codex`（缺了它 `provider: codex`
-   不存在，委派工具不会注册）。
+2. profile 里已安装 codex 子代理 bundle `@deepseek-ai/dsh-subagent-codex`。本 bundle 在 Host 层
+   插入自己的 provider 行（`providerName: codex-delegate`），该插件包必须能被解析，否则 provider
+   与委派工具都不会注册。
 3. codex CLI 已安装且已登录（`codex login status` 显示已登录，或已配置等效的认证方式；凭据与 `~/.codex/config.toml` 配置是两回事）。子代理用哪个模型/provider、是否免审批，
    由目标机器自己的 codex 原生配置决定。
 4. 本 bundle 通过 `link:` 或 registry 安装均可；若是 `link:`，目录不要移动或删除。
@@ -73,7 +74,7 @@ npm publish                # publishConfig 已指向 registry.npmjs.org、access
 
 ## 兼容性
 
-- `peerDependencies` 把用到的 8 个 DSH 包钉在 `^0.2.2-rc.1`。DSH 大版本升级后先核对
+- `peerDependencies` 把用到的 9 个 DSH 包钉在 `^0.2.2-rc.1`。DSH 大版本升级后先核对
   patch 里的包名/字段，再放宽范围并重新发布。
 - codex 大版本变更可能影响 `permissionMode` 映射，升级后跑一次连通性验证（派一个 `echo` 任务）。
 
@@ -82,7 +83,13 @@ npm publish                # publishConfig 已指向 registry.npmjs.org、access
 - **更硬的约束**：加一个 gate 插件，用 `ctx.tools.restrict(...)` 把全局工具也屏蔽掉。当前版本**未包含**：
   `restrict` 要求调用方处于 scoped context，而 preset 作用域下注册与遮蔽的交互（是否会把 preset 自己
   挂的 `ask_user_question`/`todo_write` 一起挡掉）只有真实会话才能验证，未验证前不发布硬隔离。
-- **codex 权限**：在委派工具配置里加 `permissionMode`（默认 `never`），或改 codex 原生配置。
+- **codex 权限与沙箱**：`permissionMode` 写在 provider 行（`subagent-codex-delegate`），不是工具行：
+  - `approve-for-me`（当前默认）：`approvalPolicy: on-request` + 自动审批 + `sandbox: workspace-write`
+    → **工作区可写**，无人值守也能跑；需要越界的操作走 codex 自动审批。
+  - `never`：`approvalPolicy: never`，沙箱不显式指定，实测拿到的是**只读沙箱**——工作区内也写不了文件
+    （`operation not permitted`），只有读/检索/联网可用。
+  - `dangerously-bypass-approvals-and-sandbox`：无审批、全盘可写，慎用。
+  另外 codex 原生配置（`~/.codex/config.toml`）仍会叠加，例如 `network_access`、模型选择等。
 - **只保留委派**：去掉 `tool-todo`、`tool-ask-user`，同时删掉 persona 里对应的规则。
 
 ## 卸载
@@ -93,6 +100,8 @@ npm publish                # publishConfig 已指向 registry.npmjs.org、access
 
 ### 1.0.1
 
+- **新增专用 provider `codex-delegate`（`permissionMode: approve-for-me`）**：修复默认 `never` 下
+  codex 沙箱为只读、工作区内也无法写文件的问题（实测）；委派工具改为指向该 provider。
 - persona 重写：明确"子代理不能中途提问，决策要提前写进任务"、完成通知到达前不得声称结果、
   区分成功/部分完成/失败/阻塞、后续任务必须附上前次结果、汇报只能陈述子代理明确报告过的改动与验证。
 - 移除 `includeRuntimeContext: false`（`complete: true` 已限定提示词范围，这一项只是重复抑制）。
